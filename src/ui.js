@@ -157,7 +157,14 @@ export function init(root) {
     if (state.selected != null) { erase(state, state.selected); refresh(); onChange(); }
   });
   root.querySelector('#hint').addEventListener('click', () => {
-    if (state.selected != null) { hint(state, state.selected); refresh(); onChange(); }
+    const hintable = (i) =>
+      i != null && i >= 0 && !state.cells[i].given && state.cells[i].value !== state.solution[i];
+    // Hint the selected cell if it's fillable; otherwise reveal the first empty/incorrect cell.
+    let i = state.selected;
+    if (!hintable(i)) {
+      i = state.cells.findIndex((c, idx) => !c.given && c.value !== state.solution[idx]);
+    }
+    if (hintable(i)) { state.selected = i; hint(state, i); refresh(); onChange(); }
   });
   root.querySelector('#checkWrong').addEventListener('change', (e) => {
     flags.checkWrong = e.target.checked; refresh();
