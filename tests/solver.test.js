@@ -19,3 +19,31 @@ test('isValidPlacement rejects a duplicate in a peer', () => {
   assert.equal(isValidPlacement(grid, 0, 5), false);
   assert.equal(isValidPlacement(grid, 0, 6), true);
 });
+
+import { solve, countSolutions } from '../src/solver.js';
+
+// A known puzzle with a unique solution.
+const PUZZLE = (
+  '530070000' + '600195000' + '098000060' +
+  '800060003' + '400803001' + '700020006' +
+  '060000280' + '000419005' + '000080079'
+).split('').map(Number);
+
+const SOLUTION = (
+  '534678912' + '672195348' + '198342567' +
+  '859761423' + '426853791' + '713924856' +
+  '961537284' + '287419635' + '345286179'
+).split('').map(Number);
+
+test('solve returns the correct unique solution', () => {
+  const result = solve(PUZZLE);
+  assert.deepEqual(result, SOLUTION);
+});
+
+test('countSolutions returns 1 for a unique puzzle', () => {
+  assert.equal(countSolutions(PUZZLE, 2), 1);
+});
+
+test('countSolutions returns >= 2 for an empty grid', () => {
+  assert.equal(countSolutions(new Array(81).fill(0), 2), 2);
+});
