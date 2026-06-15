@@ -75,6 +75,59 @@ export function classify(grid) {
   return null;
 }
 
-// Populated in Task 5.
-export let level2 = null;
-export function _setLevel2(techniques) { level2 = techniques; }
+function setEq(a, b) {
+  if (a.size !== b.size) return false;
+  for (const x of a) if (!b.has(x)) return false;
+  return true;
+}
+
+export function nakedPair(grid, cands) {
+  let progress = false;
+  for (const unit of units) {
+    const empties = unit.filter((i) => grid[i] === 0);
+    for (let a = 0; a < empties.length; a++) {
+      const ca = cands[empties[a]];
+      if (ca.size !== 2) continue;
+      for (let b = a + 1; b < empties.length; b++) {
+        const cb = cands[empties[b]];
+        if (cb.size === 2 && setEq(ca, cb)) {
+          for (const i of unit) {
+            if (i === empties[a] || i === empties[b] || grid[i] !== 0) continue;
+            for (const v of ca) if (cands[i].delete(v)) progress = true;
+          }
+        }
+      }
+    }
+  }
+  return progress;
+}
+
+export function pointingPair(grid, cands) {
+  let progress = false;
+  for (let b = 0; b < 9; b++) {
+    const box = units[18 + b];
+    for (let v = 1; v <= 9; v++) {
+      const spots = box.filter((i) => grid[i] === 0 && cands[i].has(v));
+      if (spots.length < 2) continue;
+      const rows = new Set(spots.map((i) => Math.floor(i / 9)));
+      const cols = new Set(spots.map((i) => i % 9));
+      if (rows.size === 1) {
+        const r = [...rows][0];
+        for (let c = 0; c < 9; c++) {
+          const i = r * 9 + c;
+          if (!box.includes(i) && grid[i] === 0 && cands[i].delete(v)) progress = true;
+        }
+      }
+      if (cols.size === 1) {
+        const c = [...cols][0];
+        for (let r = 0; r < 9; r++) {
+          const i = r * 9 + c;
+          if (!box.includes(i) && grid[i] === 0 && cands[i].delete(v)) progress = true;
+        }
+      }
+    }
+  }
+  return progress;
+}
+
+export const level2 = [nakedPair, pointingPair];
