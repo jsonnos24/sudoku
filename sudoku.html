@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sudoku</title>
+  <style>
+:root {
+  --given: #1a1a1a;
+  --entry: #2563eb;
+  --mark: #555;
+  --bad: #dc2626;
+  --sel: #cfe3ff;
+  --peer: #e8eef7;
+  --same: #bcd4ff;
+  --line: #b9b9b9;
+  --box: #444;
+  --bg: #f7f7f8;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; font-family: system-ui, sans-serif; background: var(--bg);
+  color: #111; display: flex; justify-content: center;
+}
+.app {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 16px; padding: 16px; width: 100%; max-width: 920px;
+}
+.topbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; }
+.topbar select, .topbar button { font-size: 15px; padding: 6px 12px; }
+.timer { font-variant-numeric: tabular-nums; font-weight: 600; }
+.layout { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
+
+.board {
+  display: grid; grid-template-columns: repeat(9, 1fr);
+  width: min(92vw, 540px); aspect-ratio: 1;
+  border: 3px solid var(--box); background: var(--box); gap: 1px;
+  touch-action: manipulation;
+}
+.cell {
+  position: relative; background: #fff; display: flex;
+  align-items: center; justify-content: center; cursor: pointer;
+  user-select: none; font-size: clamp(18px, 5.2vw, 30px);
+}
+/* thick box separators */
+.cell.bt { border-top: 2px solid var(--box); }
+.cell.bl { border-left: 2px solid var(--box); }
+.cell.value-given { color: var(--given); font-weight: 600; }
+.cell.value-entry { color: var(--entry); }
+.cell.sel { background: var(--sel); }
+.cell.peer { background: var(--peer); }
+.cell.same { background: var(--same); }
+.cell.bad { color: var(--bad); }
+
+.center-marks {
+  position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; flex-wrap: wrap; gap: 0 3px;
+  font-size: clamp(9px, 2.4vw, 13px); color: var(--mark); padding: 2px;
+  line-height: 1.1;
+}
+.corner-marks {
+  position: absolute; inset: 3px; display: grid;
+  grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr 1fr;
+  font-size: clamp(9px, 2.4vw, 13px); color: var(--mark); pointer-events: none;
+}
+.corner-marks span { display: flex; align-items: center; justify-content: center; }
+/* corner fill order: TL, TR, BL, BR, TC, BC, ML, MR */
+.corner-marks .p0 { grid-area: 1 / 1; justify-content: flex-start; align-items: flex-start; }
+.corner-marks .p1 { grid-area: 1 / 3; justify-content: flex-end; align-items: flex-start; }
+.corner-marks .p2 { grid-area: 3 / 1; justify-content: flex-start; align-items: flex-end; }
+.corner-marks .p3 { grid-area: 3 / 3; justify-content: flex-end; align-items: flex-end; }
+.corner-marks .p4 { grid-area: 1 / 2; align-items: flex-start; }
+.corner-marks .p5 { grid-area: 3 / 2; align-items: flex-end; }
+.corner-marks .p6 { grid-area: 2 / 1; justify-content: flex-start; }
+.corner-marks .p7 { grid-area: 2 / 3; justify-content: flex-end; }
+
+.controls { display: flex; flex-direction: column; gap: 12px; }
+.modes, .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.modes button.active { background: var(--entry); color: #fff; }
+.numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.numpad button { font-size: 22px; padding: 14px; min-width: 56px; cursor: pointer; }
+button { cursor: pointer; border: 1px solid #bbb; border-radius: 6px; background: #fff; }
+.toggles { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.win { font-weight: 700; color: #15803d; }
+
+@media (max-width: 620px) {
+  .layout { flex-direction: column; align-items: center; }
+}
+</style>
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script>
+(() => {
+// ===== src/solver.js =====
+const N = 9;
+
+const units = (() => {
+  const u = [];
+  for (let r = 0; r < 9; r++) u.push([...Array(9)].map((_, c) => r * 9 + c));
+  for (let c = 0; c < 9; c++) u.push([...Array(9)].map((_, r) => r * 9 + c));
+  for (let br = 0; br < 3; br++) {
+    for (let bc = 0; bc < 3; bc++) {
+      const box = [];
+      for (let r = 0; r < 3; r++)
+        for (let c = 0; c < 3; c++) box.push((br * 3 + r) * 9 + (bc * 3 + c));
+      u.push(box);
+    }
+  }
+  return u;
+})();
+
+const peers = (() => {
+  const p = Array.from({ length: 81 }, () => new Set());
+  for (const unit of units)
+    for (const i of unit)
+      for (const j of unit)
+        if (i !== j) p[i].add(j);
+  return p;
+})();
+
+function isValidPlacement(grid, i, val) {
+  for (const j of peers[i]) if (grid[j] === val) return false;
+  return true;
+}
+
+function pickCell(g) {
+  let best = -1, bestCands = null;
+  for (let i = 0; i < 81; i++) {
+    if (g[i] !== 0) continue;
+    const cands = [];
+    for (let v = 1; v <= 9; v++) if (isValidPlacement(g, i, v)) cands.push(v);
+    if (cands.length === 0) return { best: -2, cands: null }; // dead end
+    if (bestCands === null || cands.length < bestCands.length) {
+      best = i; bestCands = cands;
+      if (cands.length === 1) break;
+    }
+  }
+  return { best, cands: bestCands };
+}
+
+function solve(grid) {
+  const g = grid.slice();
+  function rec() {
+    const { best, cands } = pickCell(g);
+    if (best === -2) return false;
+    if (best === -1) return true; // no empties: solved
+    for (const v of cands) {
+      g[best] = v;
+      if (rec()) return true;
+      g[best] = 0;
+    }
+    return false;
+  }
+  return rec() ? g : null;
+}
+
+function countSolutions(grid, limit = 2) {
+  const g = grid.slice();
+  let count = 0;
+  function rec() {
+    if (count >= limit) return;
+    const { best, cands } = pickCell(g);
+    if (best === -2) return;
+    if (best === -1) { count++; return; }
+    for (const v of cands) {
+      g[best] = v;
+      rec();
+      g[best] = 0;
+      if (count >= limit) return;
+    }
+  }
+  rec();
+  return count;
+}
+
+
+// ===== src/rate.js =====
+
+function computeCandidates(grid) {
+  const cands = Array.from({ length: 81 }, () => new Set());
+  for (let i = 0; i < 81; i++) {
+    if (grid[i] !== 0) continue;
+    for (let v = 1; v <= 9; v++) {
+      let ok = true;
+      for (const j of peers[i]) if (grid[j] === v) { ok = false; break; }
+      if (ok) cands[i].add(v);
+    }
+  }
+  return cands;
+}
+
+function place(grid, cands, i, v) {
+  grid[i] = v;
+  cands[i].clear();
+  for (const j of peers[i]) cands[j].delete(v);
+}
+
+function nakedSingle(grid, cands) {
+  let progress = false;
+  for (let i = 0; i < 81; i++) {
+    if (grid[i] === 0 && cands[i].size === 1) {
+      place(grid, cands, i, [...cands[i]][0]);
+      progress = true;
+    }
+  }
+  return progress;
+}
+
+function hiddenSingle(grid, cands) {
+  let progress = false;
+  for (const unit of units) {
+    for (let v = 1; v <= 9; v++) {
+      let spot = -1, count = 0;
+      for (const i of unit) {
+        if (grid[i] === 0 && cands[i].has(v)) { spot = i; count++; }
+      }
+      if (count === 1 && grid[spot] === 0) {
+        place(grid, cands, spot, v);
+        progress = true;
+      }
+    }
+  }
+  return progress;
+}
+
+const solved = (grid) => grid.every((v) => v !== 0);
+
+// maxLevel 1 = singles only; 2 = singles + naked pairs + pointing pairs.
+function logicalSolve(grid, maxLevel, extra = null) {
+  const g = grid.slice();
+  const cands = computeCandidates(g);
+  let progress = true;
+  while (progress && !solved(g)) {
+    progress = false;
+    if (nakedSingle(g, cands)) { progress = true; continue; }
+    if (hiddenSingle(g, cands)) { progress = true; continue; }
+    if (maxLevel >= 2 && extra) {
+      for (const technique of extra) {
+        if (technique(g, cands)) { progress = true; break; }
+      }
+    }
+  }
+  return solved(g);
+}
+
+function setEq(a, b) {
+  if (a.size !== b.size) return false;
+  for (const x of a) if (!b.has(x)) return false;
+  return true;
+}
+
+function nakedPair(grid, cands) {
+  let progress = false;
+  for (const unit of units) {
+    const empties = unit.filter((i) => grid[i] === 0);
+    for (let a = 0; a < empties.length; a++) {
+      const ca = cands[empties[a]];
+      if (ca.size !== 2) continue;
+      for (let b = a + 1; b < empties.length; b++) {
+        const cb = cands[empties[b]];
+        if (cb.size === 2 && setEq(ca, cb)) {
+          for (const i of unit) {
+            if (i === empties[a] || i === empties[b] || grid[i] !== 0) continue;
+            for (const v of ca) if (cands[i].delete(v)) progress = true;
+          }
+        }
+      }
+    }
+  }
+  return progress;
+}
+
+function pointingPair(grid, cands) {
+  let progress = false;
+  for (let b = 0; b < 9; b++) {
+    const box = units[18 + b];
+    for (let v = 1; v <= 9; v++) {
+      const spots = box.filter((i) => grid[i] === 0 && cands[i].has(v));
+      if (spots.length < 2) continue;
+      const rows = new Set(spots.map((i) => Math.floor(i / 9)));
+      const cols = new Set(spots.map((i) => i % 9));
+      if (rows.size === 1) {
+        const r = [...rows][0];
+        for (let c = 0; c < 9; c++) {
+          const i = r * 9 + c;
+          if (!box.includes(i) && grid[i] === 0 && cands[i].delete(v)) progress = true;
+        }
+      }
+      if (cols.size === 1) {
+        const c = [...cols][0];
+        for (let r = 0; r < 9; r++) {
+          const i = r * 9 + c;
+          if (!box.includes(i) && grid[i] === 0 && cands[i].delete(v)) progress = true;
+        }
+      }
+    }
+  }
+  return progress;
+}
+
+const level2 = [nakedPair, pointingPair];
+
+function classify(grid) {
+  if (logicalSolve(grid, 1)) return 'easy';
+  // level2 holds the techniques beyond singles, used to detect medium puzzles
+  if (level2 && logicalSolve(grid, 2, level2)) return 'medium';
+  if (countSolutions(grid, 2) === 1) return 'hard';
+  return null;
+}
+
+
+// ===== src/generator.js =====
+
+function shuffled(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function fill(grid) {
+  for (let i = 0; i < 81; i++) {
+    if (grid[i] !== 0) continue;
+    for (const v of shuffled([1, 2, 3, 4, 5, 6, 7, 8, 9])) {
+      if (isValidPlacement(grid, i, v)) {
+        grid[i] = v;
+        if (fill(grid)) return true;
+        grid[i] = 0;
+      }
+    }
+    return false;
+  }
+  return true;
+}
+
+function generateSolved() {
+  const grid = new Array(81).fill(0);
+  fill(grid);
+  return grid;
+}
+
+const TARGET_LEVEL = { easy: 1, medium: 2, hard: 3 };
+const levelOf = (cls) => (cls === 'easy' ? 1 : cls === 'medium' ? 2 : cls === 'hard' ? 3 : 99);
+
+function dig(solution, targetLevel) {
+  const puzzle = solution.slice();
+  for (const i of shuffled([...Array(81).keys()])) {
+    const backup = puzzle[i];
+    puzzle[i] = 0;
+    if (countSolutions(puzzle, 2) !== 1) {
+      puzzle[i] = backup;
+      continue;
+    }
+    if (targetLevel < 3) {
+      // uniqueness already confirmed above; just measure logical difficulty
+      const lvl = logicalSolve(puzzle, 1) ? 1 : logicalSolve(puzzle, 2, level2) ? 2 : 3;
+      if (lvl > targetLevel) puzzle[i] = backup;
+    }
+  }
+  return puzzle;
+}
+
+function generatePuzzle(difficulty) {
+  const targetLevel = TARGET_LEVEL[difficulty];
+  let last = null;
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const solution = generateSolved();
+    const puzzle = dig(solution, targetLevel);
+    const got = classify(puzzle);
+    last = { puzzle, solution, difficulty: got };
+    if (got === difficulty) return last;
+  }
+  // Fallback: return the closest attempt we produced, labelled by its real class.
+  return last;
+}
+
+
+// ===== src/gameState.js =====
+
+function createGame({ puzzle, solution, difficulty }) {
+  const cells = puzzle.map((v) => ({
+    value: v === 0 ? null : v,
+    given: v !== 0,
+    center: new Set(),
+    corner: new Set(),
+  }));
+  return {
+    cells,
+    solution,
+    difficulty,
+    selected: null,
+    mode: 'normal', // 'normal' | 'corner' | 'center'
+    history: [],
+    future: [],
+    autoClear: true,
+  };
+}
+
+function cloneCells(cells) {
+  return cells.map((c) => ({
+    value: c.value,
+    given: c.given,
+    center: new Set(c.center),
+    corner: new Set(c.corner),
+  }));
+}
+
+function pushHistory(state) {
+  state.history.push(cloneCells(state.cells));
+  if (state.history.length > 300) state.history.shift();
+  state.future = [];
+}
+
+function setValue(state, i, v) {
+  const cell = state.cells[i];
+  if (cell.given) return;
+  pushHistory(state);
+  if (cell.value === v) {
+    cell.value = null;
+    return;
+  }
+  cell.value = v;
+  cell.center.clear();
+  cell.corner.clear();
+  if (state.autoClear) {
+    for (const j of peers[i]) {
+      state.cells[j].center.delete(v);
+      state.cells[j].corner.delete(v);
+    }
+  }
+}
+
+function toggleMark(state, layer, i, v) {
+  const cell = state.cells[i];
+  if (cell.given || cell.value !== null) return;
+  pushHistory(state);
+  const set = cell[layer];
+  if (set.has(v)) set.delete(v);
+  else set.add(v);
+}
+
+function erase(state, i) {
+  const cell = state.cells[i];
+  if (cell.given) return;
+  pushHistory(state);
+  cell.value = null;
+  cell.center.clear();
+  cell.corner.clear();
+}
+
+function undo(state) {
+  if (state.history.length === 0) return;
+  state.future.push(cloneCells(state.cells));
+  state.cells = state.history.pop();
+}
+
+function redo(state) {
+  if (state.future.length === 0) return;
+  state.history.push(cloneCells(state.cells));
+  state.cells = state.future.pop();
+}
+
+function findConflicts(state) {
+  const bad = new Set();
+  for (let i = 0; i < 81; i++) {
+    const v = state.cells[i].value;
+    if (v == null) continue;
+    for (const j of peers[i]) {
+      if (state.cells[j].value === v) {
+        bad.add(i);
+        bad.add(j);
+      }
+    }
+  }
+  return bad;
+}
+
+function findWrong(state) {
+  const bad = new Set();
+  for (let i = 0; i < 81; i++) {
+    const v = state.cells[i].value;
+    if (v != null && v !== state.solution[i]) bad.add(i);
+  }
+  return bad;
+}
+
+function isComplete(state) {
+  return state.cells.every((c, i) => c.value === state.solution[i]);
+}
+
+function hint(state, i) {
+  const cell = state.cells[i];
+  if (cell.given || cell.value === state.solution[i]) return;
+  pushHistory(state);
+  cell.value = state.solution[i];
+  cell.center.clear();
+  cell.corner.clear();
+}
+
+
+// ===== src/persist.js =====
+function serialize(state) {
+  return {
+    difficulty: state.difficulty,
+    solution: state.solution,
+    elapsed: state.elapsed ?? 0,
+    autoClear: state.autoClear,
+    cells: state.cells.map((c) => ({
+      value: c.value,
+      given: c.given,
+      center: [...c.center],
+      corner: [...c.corner],
+    })),
+  };
+}
+
+function deserialize(data) {
+  return {
+    difficulty: data.difficulty,
+    solution: data.solution,
+    elapsed: data.elapsed ?? 0,
+    autoClear: data.autoClear ?? true,
+    selected: null,
+    mode: 'normal',
+    history: [],
+    future: [],
+    cells: data.cells.map((c) => ({
+      value: c.value,
+      given: c.given,
+      center: new Set(c.center),
+      corner: new Set(c.corner),
+    })),
+  };
+}
+
+
+// ===== src/render.js =====
+
+const CORNER_ORDER = [0, 1, 2, 3, 4, 5, 6, 7]; // index into the 8 placed slots
+
+function render(state, root, flags = {}) {
+  const conflicts = findConflicts(state);
+  const wrong = flags.checkWrong ? findWrong(state) : new Set();
+  const sel = state.selected;
+  const selVal = sel != null ? state.cells[sel].value : null;
+  const peerSet = sel != null ? peersForHighlight(sel) : null;
+
+  root.innerHTML = '';
+  for (let i = 0; i < 81; i++) {
+    const cell = state.cells[i];
+    const row = Math.floor(i / 9);
+    const col = i % 9;
+    const el = document.createElement('div');
+    el.className = 'cell';
+    el.dataset.index = String(i);
+    if (row % 3 === 0) el.classList.add('bt');
+    if (col % 3 === 0) el.classList.add('bl');
+
+    if (sel != null) {
+      if (i === sel) el.classList.add('sel');
+      else if (peerSet.has(i)) el.classList.add('peer');
+      if (selVal != null && cell.value === selVal && i !== sel) el.classList.add('same');
+    }
+
+    if (cell.value != null) {
+      el.textContent = String(cell.value);
+      el.classList.add(cell.given ? 'value-given' : 'value-entry');
+      if (conflicts.has(i) || wrong.has(i)) el.classList.add('bad');
+    } else {
+      if (cell.corner.size) {
+        const wrap = document.createElement('div');
+        wrap.className = 'corner-marks';
+        const digits = [...cell.corner].sort((a, b) => a - b);
+        digits.slice(0, 8).forEach((d, slot) => {
+          const s = document.createElement('span');
+          s.className = 'p' + CORNER_ORDER[slot];
+          s.textContent = String(d);
+          wrap.appendChild(s);
+        });
+        el.appendChild(wrap);
+      }
+      if (cell.center.size) {
+        const wrap = document.createElement('div');
+        wrap.className = 'center-marks';
+        wrap.textContent = [...cell.center].sort((a, b) => a - b).join('');
+        el.appendChild(wrap);
+      }
+    }
+    root.appendChild(el);
+  }
+}
+
+function peersForHighlight(i) {
+  // row, col, box of i (excluding i itself)
+  const set = new Set();
+  const r = Math.floor(i / 9), c = i % 9;
+  for (let k = 0; k < 9; k++) { set.add(r * 9 + k); set.add(k * 9 + c); }
+  const br = Math.floor(r / 3) * 3, bc = Math.floor(c / 3) * 3;
+  for (let dr = 0; dr < 3; dr++)
+    for (let dc = 0; dc < 3; dc++) set.add((br + dr) * 9 + (bc + dc));
+  set.delete(i);
+  return set;
+}
+
+
+// ===== src/input.js =====
+
+const MODE_LAYER = { corner: 'corner', center: 'center' };
+
+function applyDigit(state, v) {
+  const i = state.selected;
+  if (i == null) return;
+  if (state.mode === 'normal') setValue(state, i, v);
+  else toggleMark(state, MODE_LAYER[state.mode], i, v);
+}
+
+function attachInput(getState, boardEl, refresh, onChange) {
+  const changed = () => { refresh(); onChange && onChange(); };
+
+  boardEl.addEventListener('click', (e) => {
+    const cellEl = e.target.closest('.cell');
+    if (!cellEl) return;
+    getState().selected = Number(cellEl.dataset.index);
+    refresh();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    const state = getState();
+    if (e.key >= '1' && e.key <= '9') { applyDigit(state, Number(e.key)); changed(); return; }
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      if (state.selected != null) { erase(state, state.selected); changed(); }
+      return;
+    }
+    if (state.selected != null && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+      e.preventDefault();
+      state.selected = moveSelection(state.selected, e.key);
+      refresh();
+      return;
+    }
+    const k = e.key.toLowerCase();
+    if (k === 'n') { state.mode = 'normal'; refresh(); }
+    else if (k === 'c') { state.mode = 'corner'; refresh(); }
+    else if (k === 'x' || k === 'm') { state.mode = 'center'; refresh(); }
+    else if (k === 'z' && (e.ctrlKey || e.metaKey)) { undo(state); changed(); }
+    else if (k === 'y' && (e.ctrlKey || e.metaKey)) { redo(state); changed(); }
+  });
+}
+
+function moveSelection(i, key) {
+  let r = Math.floor(i / 9), c = i % 9;
+  if (key === 'ArrowUp') r = (r + 8) % 9;
+  if (key === 'ArrowDown') r = (r + 1) % 9;
+  if (key === 'ArrowLeft') c = (c + 8) % 9;
+  if (key === 'ArrowRight') c = (c + 1) % 9;
+  return r * 9 + c;
+}
+
+
+// ===== src/ui.js =====
+
+const SAVE_KEY = 'sudoku.save.v1';
+const STATS_KEY = 'sudoku.stats.v1';
+
+let state = null;
+let flags = { checkWrong: false };
+let timerId = null;
+let boardEl, timerEl, statusEl;
+
+function refresh() {
+  render(state, boardEl, flags);
+  document.querySelectorAll('.modes button').forEach((b) => {
+    b.classList.toggle('active', b.dataset.mode === state.mode);
+  });
+}
+
+function onChange() {
+  save();
+  if (isComplete(state)) win();
+}
+
+function save() {
+  const data = serialize(state);
+  localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+}
+
+function startTimer() {
+  stopTimer();
+  timerId = setInterval(() => {
+    state.elapsed = (state.elapsed ?? 0) + 1;
+    renderTimer();
+    if (state.elapsed % 5 === 0) save();
+  }, 1000);
+}
+function stopTimer() { if (timerId) clearInterval(timerId); timerId = null; }
+function renderTimer() {
+  const t = state.elapsed ?? 0;
+  const m = String(Math.floor(t / 60)).padStart(2, '0');
+  const s = String(t % 60).padStart(2, '0');
+  timerEl.textContent = `${m}:${s}`;
+}
+
+function win() {
+  stopTimer();
+  statusEl.textContent = `Solved in ${timerEl.textContent}!`;
+  statusEl.className = 'win';
+  recordBest(state.difficulty, state.elapsed ?? 0);
+}
+
+function recordBest(difficulty, elapsed) {
+  const stats = JSON.parse(localStorage.getItem(STATS_KEY) || '{}');
+  if (stats[difficulty] == null || elapsed < stats[difficulty]) {
+    stats[difficulty] = elapsed;
+    localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+  }
+}
+
+function newGame(difficulty) {
+  const { puzzle, solution } = generatePuzzle(difficulty);
+  state = createGame({ puzzle, solution, difficulty });
+  state.elapsed = 0;
+  statusEl.textContent = '';
+  statusEl.className = '';
+  refresh();
+  renderTimer();
+  startTimer();
+  save();
+}
+
+function restoreOrNew() {
+  const raw = localStorage.getItem(SAVE_KEY);
+  if (raw) {
+    try {
+      state = deserialize(JSON.parse(raw));
+      refresh();
+      renderTimer();
+      if (!isComplete(state)) startTimer();
+      return;
+    } catch { /* fall through to a fresh game */ }
+  }
+  newGame('easy');
+}
+
+function init(root) {
+  root.innerHTML = `
+    <div class="topbar">
+      <label>Difficulty
+        <select id="difficulty">
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Difficult</option>
+        </select>
+      </label>
+      <button id="new">New Game</button>
+      <span class="timer" id="timer">00:00</span>
+      <span id="status"></span>
+    </div>
+    <div class="layout">
+      <div class="board" id="board"></div>
+      <div class="controls">
+        <div class="modes">
+          <button data-mode="normal">Normal</button>
+          <button data-mode="corner">Corner</button>
+          <button data-mode="center">Center</button>
+        </div>
+        <div class="numpad" id="numpad">
+          ${[1,2,3,4,5,6,7,8,9].map((n) => `<button data-num="${n}">${n}</button>`).join('')}
+        </div>
+        <div class="actions">
+          <button id="undo">Undo</button>
+          <button id="redo">Redo</button>
+          <button id="erase">Erase</button>
+          <button id="hint">Hint</button>
+        </div>
+        <div class="toggles">
+          <label><input type="checkbox" id="checkWrong"> Highlight mistakes</label>
+        </div>
+      </div>
+    </div>`;
+
+  boardEl = root.querySelector('#board');
+  timerEl = root.querySelector('#timer');
+  statusEl = root.querySelector('#status');
+
+  restoreOrNew();
+  attachInput(() => state, boardEl, refresh, onChange);
+
+  root.querySelector('#new').addEventListener('click', () => {
+    newGame(root.querySelector('#difficulty').value);
+  });
+  root.querySelector('#difficulty').value = state.difficulty;
+  root.querySelector('#numpad').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    applyDigit(state, Number(btn.dataset.num));
+    refresh(); onChange();
+  });
+  root.querySelectorAll('.modes button').forEach((b) => {
+    b.addEventListener('click', () => { state.mode = b.dataset.mode; refresh(); });
+  });
+  root.querySelector('#undo').addEventListener('click', () => { undo(state); refresh(); onChange(); });
+  root.querySelector('#redo').addEventListener('click', () => { redo(state); refresh(); onChange(); });
+  root.querySelector('#erase').addEventListener('click', () => {
+    if (state.selected != null) { erase(state, state.selected); refresh(); onChange(); }
+  });
+  root.querySelector('#hint').addEventListener('click', () => {
+    if (state.selected != null) { hint(state, state.selected); refresh(); onChange(); }
+  });
+  root.querySelector('#checkWrong').addEventListener('change', (e) => {
+    flags.checkWrong = e.target.checked; refresh();
+  });
+}
+
+
+init(document.getElementById('app'));
+})();
+</script>
+</body>
+</html>
