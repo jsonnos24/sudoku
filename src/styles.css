@@ -1,0 +1,81 @@
+:root {
+  --given: #1a1a1a;
+  --entry: #2563eb;
+  --mark: #555;
+  --bad: #dc2626;
+  --sel: #cfe3ff;
+  --peer: #e8eef7;
+  --same: #bcd4ff;
+  --line: #b9b9b9;
+  --box: #444;
+  --bg: #f7f7f8;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; font-family: system-ui, sans-serif; background: var(--bg);
+  color: #111; display: flex; justify-content: center;
+}
+.app {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 16px; padding: 16px; width: 100%; max-width: 920px;
+}
+.topbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; }
+.topbar select, .topbar button { font-size: 15px; padding: 6px 12px; }
+.timer { font-variant-numeric: tabular-nums; font-weight: 600; }
+.layout { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
+
+.board {
+  display: grid; grid-template-columns: repeat(9, 1fr);
+  width: min(92vw, 540px); aspect-ratio: 1;
+  border: 3px solid var(--box); background: var(--box); gap: 1px;
+  touch-action: manipulation;
+}
+.cell {
+  position: relative; background: #fff; display: flex;
+  align-items: center; justify-content: center; cursor: pointer;
+  user-select: none; font-size: clamp(18px, 5.2vw, 30px);
+}
+/* thick box separators */
+.cell.bt { border-top: 2px solid var(--box); }
+.cell.bl { border-left: 2px solid var(--box); }
+.cell.value-given { color: var(--given); font-weight: 600; }
+.cell.value-entry { color: var(--entry); }
+.cell.sel { background: var(--sel); }
+.cell.peer { background: var(--peer); }
+.cell.same { background: var(--same); }
+.cell.bad { color: var(--bad); }
+
+.center-marks {
+  position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; flex-wrap: wrap; gap: 0 3px;
+  font-size: clamp(9px, 2.4vw, 13px); color: var(--mark); padding: 2px;
+  line-height: 1.1;
+}
+.corner-marks {
+  position: absolute; inset: 3px; display: grid;
+  grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr 1fr;
+  font-size: clamp(9px, 2.4vw, 13px); color: var(--mark); pointer-events: none;
+}
+.corner-marks span { display: flex; align-items: center; justify-content: center; }
+/* corner fill order: TL, TR, BL, BR, TC, BC, ML, MR */
+.corner-marks .p0 { grid-area: 1 / 1; justify-content: flex-start; align-items: flex-start; }
+.corner-marks .p1 { grid-area: 1 / 3; justify-content: flex-end; align-items: flex-start; }
+.corner-marks .p2 { grid-area: 3 / 1; justify-content: flex-start; align-items: flex-end; }
+.corner-marks .p3 { grid-area: 3 / 3; justify-content: flex-end; align-items: flex-end; }
+.corner-marks .p4 { grid-area: 1 / 2; align-items: flex-start; }
+.corner-marks .p5 { grid-area: 3 / 2; align-items: flex-end; }
+.corner-marks .p6 { grid-area: 2 / 1; justify-content: flex-start; }
+.corner-marks .p7 { grid-area: 2 / 3; justify-content: flex-end; }
+
+.controls { display: flex; flex-direction: column; gap: 12px; }
+.modes, .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.modes button.active { background: var(--entry); color: #fff; }
+.numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.numpad button { font-size: 22px; padding: 14px; min-width: 56px; cursor: pointer; }
+button { cursor: pointer; border: 1px solid #bbb; border-radius: 6px; background: #fff; }
+.toggles { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.win { font-weight: 700; color: #15803d; }
+
+@media (max-width: 620px) {
+  .layout { flex-direction: column; align-items: center; }
+}
