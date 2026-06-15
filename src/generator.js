@@ -1,5 +1,5 @@
 import { isValidPlacement, countSolutions } from './solver.js';
-import { classify } from './rate.js';
+import { classify, logicalSolve, level2 } from './rate.js';
 
 function shuffled(arr) {
   const a = arr.slice();
@@ -43,8 +43,10 @@ function dig(solution, targetLevel) {
       puzzle[i] = backup;
       continue;
     }
-    if (targetLevel < 3 && levelOf(classify(puzzle)) > targetLevel) {
-      puzzle[i] = backup;
+    if (targetLevel < 3) {
+      // uniqueness already confirmed above; just measure logical difficulty
+      const lvl = logicalSolve(puzzle, 1) ? 1 : logicalSolve(puzzle, 2, level2) ? 2 : 3;
+      if (lvl > targetLevel) puzzle[i] = backup;
     }
   }
   return puzzle;

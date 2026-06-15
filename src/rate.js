@@ -67,14 +67,6 @@ export function logicalSolve(grid, maxLevel, extra = null) {
   return solved(g);
 }
 
-export function classify(grid) {
-  if (logicalSolve(grid, 1)) return 'easy';
-  // level-2 techniques are wired in Task 5 via `level2`
-  if (level2 && logicalSolve(grid, 2, level2)) return 'medium';
-  if (countSolutions(grid, 2) === 1) return 'hard';
-  return null;
-}
-
 function setEq(a, b) {
   if (a.size !== b.size) return false;
   for (const x of a) if (!b.has(x)) return false;
@@ -131,3 +123,11 @@ export function pointingPair(grid, cands) {
 }
 
 export const level2 = [nakedPair, pointingPair];
+
+export function classify(grid) {
+  if (logicalSolve(grid, 1)) return 'easy';
+  // level2 holds the techniques beyond singles, used to detect medium puzzles
+  if (level2 && logicalSolve(grid, 2, level2)) return 'medium';
+  if (countSolutions(grid, 2) === 1) return 'hard';
+  return null;
+}

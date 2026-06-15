@@ -37,3 +37,15 @@ test('nakedPair eliminates the pair digits from other cells in a unit', () => {
   assert.equal(progress, true);
   assert.deepEqual([...cands[2]], [3]);
 });
+
+test('nakedPair eliminates the pair digits from a box peer', () => {
+  const grid = new Array(81).fill(0);
+  const cands = Array.from({ length: 81 }, () => new Set());
+  // Pair in cells 0 and 1 (same row AND same box 0)
+  cands[0] = new Set([1, 2]);
+  cands[1] = new Set([1, 2]);
+  cands[10] = new Set([1, 2, 5]); // box 0, different row -> should lose 1 and 2 -> {5}
+  const progress = nakedPair(grid, cands);
+  assert.equal(progress, true);
+  assert.deepEqual([...cands[10]], [5]);
+});
