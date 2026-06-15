@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, setValue, toggleMark, erase } from '../src/gameState.js';
+import { createGame, setValue, toggleMark, erase, undo, redo } from '../src/gameState.js';
 
 function newGame() {
   const puzzle = new Array(81).fill(0);
@@ -54,5 +54,24 @@ test('erase clears a non-given cell', () => {
   const g = newGame();
   setValue(g, 1, 7);
   erase(g, 1);
+  assert.equal(g.cells[1].value, null);
+});
+
+test('undo reverts the last move; redo reapplies it', () => {
+  const g = newGame();
+  setValue(g, 1, 7);
+  setValue(g, 2, 4);
+  undo(g);
+  assert.equal(g.cells[2].value, null);
+  assert.equal(g.cells[1].value, 7);
+  undo(g);
+  assert.equal(g.cells[1].value, null);
+  redo(g);
+  assert.equal(g.cells[1].value, 7);
+});
+
+test('undo with empty history is a no-op', () => {
+  const g = newGame();
+  undo(g); // should not throw
   assert.equal(g.cells[1].value, null);
 });

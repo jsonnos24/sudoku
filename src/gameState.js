@@ -70,3 +70,15 @@ export function erase(state, i) {
   cell.center.clear();
   cell.corner.clear();
 }
+
+export function undo(state) {
+  if (state.history.length === 0) return;
+  state.future.push(cloneCells(state.cells));
+  state.cells = state.history.pop();
+}
+
+export function redo(state) {
+  if (state.future.length === 0) return;
+  state.history.push(cloneCells(state.cells));
+  state.cells = state.future.pop();
+}
