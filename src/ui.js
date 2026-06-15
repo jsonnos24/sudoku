@@ -21,7 +21,14 @@ function refresh() {
 
 function onChange() {
   save();
-  if (isComplete(state)) win();
+  if (isComplete(state)) {
+    win();
+  } else if (statusEl.className === 'win') {
+    // User undid past the solution — clear stale win banner and resume timing.
+    statusEl.textContent = '';
+    statusEl.className = '';
+    startTimer();
+  }
 }
 
 function save() {
@@ -79,7 +86,8 @@ function restoreOrNew() {
       state = deserialize(JSON.parse(raw));
       refresh();
       renderTimer();
-      if (!isComplete(state)) startTimer();
+      if (isComplete(state)) win();
+      else startTimer();
       return;
     } catch { /* fall through to a fresh game */ }
   }
