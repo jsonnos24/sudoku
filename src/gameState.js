@@ -82,3 +82,40 @@ export function redo(state) {
   state.history.push(cloneCells(state.cells));
   state.cells = state.future.pop();
 }
+
+export function findConflicts(state) {
+  const bad = new Set();
+  for (let i = 0; i < 81; i++) {
+    const v = state.cells[i].value;
+    if (v == null) continue;
+    for (const j of peers[i]) {
+      if (state.cells[j].value === v) {
+        bad.add(i);
+        bad.add(j);
+      }
+    }
+  }
+  return bad;
+}
+
+export function findWrong(state) {
+  const bad = new Set();
+  for (let i = 0; i < 81; i++) {
+    const v = state.cells[i].value;
+    if (v != null && v !== state.solution[i]) bad.add(i);
+  }
+  return bad;
+}
+
+export function isComplete(state) {
+  return state.cells.every((c, i) => c.value === state.solution[i]);
+}
+
+export function hint(state, i) {
+  const cell = state.cells[i];
+  if (cell.given || cell.value === state.solution[i]) return;
+  pushHistory(state);
+  cell.value = state.solution[i];
+  cell.center.clear();
+  cell.corner.clear();
+}

@@ -75,3 +75,35 @@ test('undo with empty history is a no-op', () => {
   undo(g); // should not throw
   assert.equal(g.cells[1].value, null);
 });
+
+import { findConflicts, findWrong, isComplete, hint } from '../src/gameState.js';
+
+test('findConflicts flags both cells of a duplicate in a row', () => {
+  const g = newGame();
+  setValue(g, 1, 9);
+  setValue(g, 2, 9); // same row as cell 1
+  const bad = findConflicts(g);
+  assert.ok(bad.has(1) && bad.has(2));
+});
+
+test('findWrong flags values that disagree with the solution', () => {
+  const g = newGame(); // dummy solution is all 1s (except cell 0 = 5)
+  setValue(g, 1, 7); // solution[1] is 1, so 7 is wrong
+  const wrong = findWrong(g);
+  assert.ok(wrong.has(1));
+});
+
+test('hint fills the selected cell with the solution value', () => {
+  const g = newGame();
+  hint(g, 1); // solution[1] = 1
+  assert.equal(g.cells[1].value, 1);
+});
+
+test('isComplete is true only when every value matches the solution', () => {
+  const puzzle = new Array(81).fill(0);
+  const solution = new Array(81).fill(1);
+  const g = createGame({ puzzle, solution, difficulty: 'easy' });
+  assert.equal(isComplete(g), false);
+  for (let i = 0; i < 81; i++) g.cells[i].value = 1;
+  assert.equal(isComplete(g), true);
+});
