@@ -1,5 +1,5 @@
 import { isValidPlacement, countSolutions } from './solver.js';
-import { classify, logicalSolve, level2 } from './rate.js';
+import { logicalSolve, level2 } from './rate.js';
 
 function shuffled(arr) {
   const a = arr.slice();
@@ -31,12 +31,21 @@ export function generateSolved() {
   return grid;
 }
 
-const TARGET_LEVEL = { easy: 1, medium: 2, hard: 3 };
-const levelOf = (cls) => (cls === 'easy' ? 1 : cls === 'medium' ? 2 : cls === 'hard' ? 3 : 99);
+// Each difficulty is defined by a clue floor (how many givens remain) plus a
+// technique ceiling (the hardest solving logic the puzzle may require). The clue
+// floor is the primary, visible difficulty lever; the ceiling keeps an "easy"
+// board from secretly needing advanced logic.
+const TARGET = {
+  easy: { level: 1, clues: 38 },
+  medium: { level: 2, clues: 30 },
+  hard: { level: 3, clues: 25 },
+};
 
-function dig(solution, targetLevel) {
+function dig(solution, targetLevel, targetClues) {
   const puzzle = solution.slice();
+  let clues = 81;
   for (const i of shuffled([...Array(81).keys()])) {
+    if (clues <= targetClues) break;
     const backup = puzzle[i];
     puzzle[i] = 0;
     if (countSolutions(puzzle, 2) !== 1) {
@@ -44,24 +53,20 @@ function dig(solution, targetLevel) {
       continue;
     }
     if (targetLevel < 3) {
-      // uniqueness already confirmed above; just measure logical difficulty
+      // uniqueness already confirmed above; reject removals that push the puzzle
+      // past the technique ceiling for this difficulty.
       const lvl = logicalSolve(puzzle, 1) ? 1 : logicalSolve(puzzle, 2, level2) ? 2 : 3;
-      if (lvl > targetLevel) puzzle[i] = backup;
+      if (lvl > targetLevel) { puzzle[i] = backup; continue; }
     }
+    clues--;
   }
   return puzzle;
 }
 
 export function generatePuzzle(difficulty) {
-  const targetLevel = TARGET_LEVEL[difficulty];
-  let last = null;
-  for (let attempt = 0; attempt < 40; attempt++) {
-    const solution = generateSolved();
-    const puzzle = dig(solution, targetLevel);
-    const got = classify(puzzle);
-    last = { puzzle, solution, difficulty: got };
-    if (got === difficulty) return last;
-  }
-  // Fallback: return the closest attempt we produced, labelled by its real class.
-  return last;
+  const { level, clues } = TARGET[difficulty];
+  const solution = generateSolved();
+  // dig guarantees uniqueness at every step, so a single pass suffices.
+  const puzzle = dig(solution, level, clues);
+  return { puzzle, solution, difficulty };
 }

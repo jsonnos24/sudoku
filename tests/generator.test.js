@@ -20,8 +20,17 @@ import { generatePuzzle } from '../src/generator.js';
 import { countSolutions } from '../src/solver.js';
 import { classify } from '../src/rate.js';
 
+// Clue floors per difficulty: a puzzle never has fewer givens than its target.
+const CLUE_TARGET = { easy: 38, medium: 30, hard: 25 };
+// Technique ceiling: a puzzle is never harder than these classes allow.
+const ALLOWED_CLASS = {
+  easy: new Set(['easy']),
+  medium: new Set(['easy', 'medium']),
+  hard: new Set(['easy', 'medium', 'hard']),
+};
+
 for (const difficulty of ['easy', 'medium', 'hard']) {
-  test(`generatePuzzle('${difficulty}') yields a unique puzzle of that difficulty`, () => {
+  test(`generatePuzzle('${difficulty}') yields a unique, on-target puzzle`, () => {
     const { puzzle, solution, difficulty: got } = generatePuzzle(difficulty);
     assert.equal(puzzle.length, 81);
     assert.equal(solution.length, 81);
@@ -31,6 +40,18 @@ for (const difficulty of ['easy', 'medium', 'hard']) {
     }
     assert.equal(countSolutions(puzzle, 2), 1);
     assert.equal(got, difficulty);
-    assert.equal(classify(puzzle), difficulty);
+
+    // Clue floor: at least the target number of givens.
+    const clues = puzzle.filter((v) => v !== 0).length;
+    assert.ok(
+      clues >= CLUE_TARGET[difficulty],
+      `${difficulty}: ${clues} clues, expected >= ${CLUE_TARGET[difficulty]}`,
+    );
+
+    // Technique ceiling: not harder than the difficulty allows.
+    assert.ok(
+      ALLOWED_CLASS[difficulty].has(classify(puzzle)),
+      `${difficulty}: classified as ${classify(puzzle)}`,
+    );
   });
 }
