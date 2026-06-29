@@ -26,6 +26,7 @@ body {
 
 .board {
   display: grid; grid-template-columns: repeat(9, 1fr);
+  grid-template-rows: repeat(9, 1fr);
   width: min(92vw, 540px); aspect-ratio: 1;
   border: 3px solid var(--box); background: var(--box); gap: 1px;
   touch-action: manipulation;
@@ -34,6 +35,9 @@ body {
   position: relative; background: #fff; display: flex;
   align-items: center; justify-content: center; cursor: pointer;
   user-select: none; font-size: clamp(18px, 5.2vw, 30px);
+  /* grid items default to min-width/height:auto, which lets a content-heavy
+     cell grow its track past the 1fr share and skew rows/columns. */
+  min-width: 0; min-height: 0;
 }
 /* thick box separators */
 .cell.bt { border-top: 2px solid var(--box); }

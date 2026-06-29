@@ -15,12 +15,16 @@ export function attachInput(getState, boardEl, refresh, onChange) {
   boardEl.addEventListener('click', (e) => {
     const cellEl = e.target.closest('.cell');
     if (!cellEl) return;
-    getState().selected = Number(cellEl.dataset.index);
+    const state = getState();
+    const idx = Number(cellEl.dataset.index);
+    // Clicking the already-selected cell deselects it.
+    state.selected = state.selected === idx ? null : idx;
     refresh();
   });
 
   document.addEventListener('keydown', (e) => {
     const state = getState();
+    if (e.key === 'Escape') { state.selected = null; refresh(); return; }
     if (e.key >= '1' && e.key <= '9') { applyDigit(state, Number(e.key)); changed(); return; }
     if (e.key === 'Backspace' || e.key === 'Delete') {
       if (state.selected != null) { erase(state, state.selected); changed(); }
